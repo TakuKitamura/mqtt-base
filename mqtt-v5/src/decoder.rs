@@ -1198,7 +1198,7 @@ pub fn decode_mqtt(
         println!("");
         println!("---");
         println!("MQTT Packet Data (hex)");
-        println!("{:X?}", temp_buf.to_vec());
+        println!("{:02x?}", &temp_buf.to_vec()[..(temp_buf.len() - 1)]);
         println!("");
         let data = mqtt_packet_parse(request, request_length);
         println!("message_type=0x{:02x?}", data.message_type);
