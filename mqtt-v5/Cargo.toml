@@ -20,3 +20,7 @@ tokio-util = { optional = true, version = "0.3", features = ["codec"] }
 websocket-codec = { optional = true, version = "0.3" }
 sha1 = { optional = true, version = "0.6.0" }
 base64 = { optional = true, version = "0.11.0" }
+
+[build-dependencies]
+cc = "1.0.35"
+libc = "0.2.0"

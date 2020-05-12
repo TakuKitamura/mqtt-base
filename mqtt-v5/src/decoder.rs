@@ -1118,6 +1118,48 @@ pub fn decode_mqtt(
     bytes: &mut BytesMut,
     protocol_version: ProtocolVersion,
 ) -> Result<Option<Packet>, DecodeError> {
+
+    #[repr(C)]
+    struct Struct_variable_header_publish {
+      topic_length: u32,
+      topic_name: *const std::os::raw::c_char,
+      property_length: u32,
+      payload: *const std::os::raw::c_char
+    }
+    
+    #[repr(C)]
+    struct Struct_flags {
+      flag: u8,
+      dup_flag: u8,
+      qos_flag: u8,
+      retain_flag: u8
+    }
+    
+    #[repr(C)]
+    struct Struct_error_struct {
+      code: u8,
+      message: *const std::os::raw::c_char
+    }
+    
+    #[repr(C)]
+    struct Struct_fixed_header {
+      message_type: u8,
+      message_name: *const std::os::raw::c_char,
+      flags: Struct_flags,
+      remaining_length: u32,
+      publish: Struct_variable_header_publish,
+      error: Struct_error_struct
+    }
+    
+    #[link(name = "mqtt")]
+    extern "C" {
+        fn mqtt_packet_parse(request: *const u8, packet_size: u32) -> Struct_fixed_header;
+    }
+    
+    unsafe fn cstring_to_str<'a>(c_string: *const std::os::raw::c_char) -> &'a str {
+      return std::ffi::CStr::from_ptr(c_string).to_str().unwrap();
+    }
+
     let mut bytes = Cursor::new(bytes);
     let first_byte = read_u8!(bytes);
 
@@ -1146,6 +1188,36 @@ pub fn decode_mqtt(
     let bytes = bytes.into_inner();
 
     let _rest = bytes.split_to(cursor_pos);
+
+    let mut temp_buf = _rest.to_vec();
+    temp_buf.push(0);
+    let request_length = (temp_buf.to_vec().len() as u32) - 1 ;
+    let  request = Box::into_raw(temp_buf.to_vec().into_boxed_slice()) as *const u8;
+    // let data = mqtt_packet_parse(buf, 10);
+    unsafe {
+        println!("");
+        println!("---");
+        println!("MQTT Packet Data (hex)");
+        println!("{:X?}", temp_buf.to_vec());
+        println!("");
+        let data = mqtt_packet_parse(request, request_length);
+        println!("message_type=0x{:02x?}", data.message_type);
+        println!("message_name={}", cstring_to_str(data.message_name));
+        println!("flag=0x{:02x?}", data.flags.flag);
+        println!("dup_flag=0x{:02x?}", data.flags.dup_flag);
+        println!("qos_flag=0x{:02x?}", data.flags.qos_flag);
+        println!("retain_flag=0x{:02x?}", data.flags.retain_flag);
+        println!("remaining_length={}", data.remaining_length);
+        println!("topic_length={}", data.publish.topic_length);
+        println!("topic_name={}", cstring_to_str(data.publish.topic_name));
+        println!("property_length={}", data.publish.property_length);
+        println!("payload={}", cstring_to_str(data.publish.payload));
+        println!("error_code={}", data.error.code);
+        println!("error_message={}", cstring_to_str(data.error.message));
+        println!("---");
+        println!("");
+    }    
+    
 
     Ok(Some(packet))
 }
