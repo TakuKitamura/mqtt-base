@@ -9,5 +9,6 @@ fn main() {
       .file("../../mqtt-packet-parser/utils.c")
       .include("../../mqtt-packet-parser/out")
       .include(kremlin_home + "/include")
+      .compiler("/usr/bin/llvm-gcc")
       .compile("libmqtt.a");
 }

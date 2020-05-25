@@ -101,11 +101,12 @@ fn decode_variable_int(bytes: &mut Cursor<&mut BytesMut>) -> Result<Option<u32>,
         let encoded_byte = read_u8!(bytes);
 
         value += ((encoded_byte & 0b0111_1111) as u32) * multiplier;
-        multiplier *= 128;
 
         if multiplier > (128 * 128 * 128) {
             return Err(DecodeError::InvalidRemainingLength);
         }
+
+        multiplier *= 128;
 
         if encoded_byte & 0b1000_0000 == 0b0000_0000 {
             break;
@@ -1114,51 +1115,93 @@ fn decode_packet(
     }
 }
 
+#[repr(C)]
+struct Struct_variable_header_publish {
+  topic_length: u32,
+  topic_name: *const std::os::raw::c_char,
+  property_length: u32,
+  payload: *const std::os::raw::c_char
+}
+
+#[repr(C)]
+struct Struct_flags {
+  flag: u8,
+  dup_flag: u8,
+  qos_flag: u8,
+  retain_flag: u8
+}
+
+#[repr(C)]
+struct Struct_error_struct {
+  code: u8,
+  message: *const std::os::raw::c_char
+}
+
+#[repr(C)]
+pub struct Struct_fixed_header {
+  message_type: u8,
+  message_name: *const std::os::raw::c_char,
+  flags: Struct_flags,
+  remaining_length: u32,
+  publish: Struct_variable_header_publish,
+  error: Struct_error_struct
+}
+
+#[link(name = "mqtt")]
+extern "C" {
+    fn mqtt_packet_parse(request: *const u8, packet_size: u32) -> Struct_fixed_header;
+}
+
+fn cstring_to_str<'a>(c_string: *const std::os::raw::c_char) -> &'a str {
+    unsafe {
+        return std::ffi::CStr::from_ptr(c_string).to_str().unwrap();
+    }
+}
+
+fn print_struct_fixed_header(org_buf: &bytes::BytesMut, data: Struct_fixed_header) {
+    let org_buf_vec = &org_buf.to_vec()[..(org_buf.len() - 1)];
+    let message_name = cstring_to_str(data.message_name);
+    let topic_name = cstring_to_str(data.publish.topic_name);
+    let payload = cstring_to_str(data.publish.payload);
+    let message = cstring_to_str(data.error.message);
+    println!("");
+    println!("---");
+    println!("MQTT Packet Data (hex)");
+    println!("{:02x?}", org_buf_vec );
+    println!("");
+    println!("message_type=0x{:02x?}", data.message_type);
+    println!("message_name={}",message_name);
+    println!("flag=0x{:02x?}", data.flags.flag);
+    println!("dup_flag=0x{:02x?}", data.flags.dup_flag);
+    println!("qos_flag=0x{:02x?}", data.flags.qos_flag);
+    println!("retain_flag=0x{:02x?}", data.flags.retain_flag);
+    println!("remaining_length={}", data.remaining_length);
+    println!("topic_length={}", data.publish.topic_length);
+    println!("topic_name={}", topic_name);
+    println!("property_length={}", data.publish.property_length);
+    println!("payload={}", payload);
+    println!("error_code={}", data.error.code);
+    println!("error_message={}", message);
+    println!("---");
+    println!("");
+}
+
+fn mqtt_packet_buf_parse(org_buf: &bytes::BytesMut) -> Struct_fixed_header {
+    let mut temp_buf = org_buf.to_vec();
+    temp_buf.push(0);
+    let request_length = (temp_buf.to_vec().len() as u32) - 1 ;
+    let  request = Box::into_raw(temp_buf.to_vec().into_boxed_slice()) as *const u8;
+    unsafe {
+        return mqtt_packet_parse(request, request_length);
+    }
+}
+
 pub fn decode_mqtt(
     bytes: &mut BytesMut,
     protocol_version: ProtocolVersion,
 ) -> Result<Option<Packet>, DecodeError> {
 
-    #[repr(C)]
-    struct Struct_variable_header_publish {
-      topic_length: u32,
-      topic_name: *const std::os::raw::c_char,
-      property_length: u32,
-      payload: *const std::os::raw::c_char
-    }
-    
-    #[repr(C)]
-    struct Struct_flags {
-      flag: u8,
-      dup_flag: u8,
-      qos_flag: u8,
-      retain_flag: u8
-    }
-    
-    #[repr(C)]
-    struct Struct_error_struct {
-      code: u8,
-      message: *const std::os::raw::c_char
-    }
-    
-    #[repr(C)]
-    struct Struct_fixed_header {
-      message_type: u8,
-      message_name: *const std::os::raw::c_char,
-      flags: Struct_flags,
-      remaining_length: u32,
-      publish: Struct_variable_header_publish,
-      error: Struct_error_struct
-    }
-    
-    #[link(name = "mqtt")]
-    extern "C" {
-        fn mqtt_packet_parse(request: *const u8, packet_size: u32) -> Struct_fixed_header;
-    }
-    
-    unsafe fn cstring_to_str<'a>(c_string: *const std::os::raw::c_char) -> &'a str {
-      return std::ffi::CStr::from_ptr(c_string).to_str().unwrap();
-    }
+    let org_start = std::time::Instant::now();
 
     let mut bytes = Cursor::new(bytes);
     let first_byte = read_u8!(bytes);
@@ -1184,40 +1227,51 @@ pub fn decode_mqtt(
         first_byte
     )?);
 
+    let org_end = org_start.elapsed();
+
     let cursor_pos = bytes.position() as usize;
     let bytes = bytes.into_inner();
 
     let _rest = bytes.split_to(cursor_pos);
 
-    let mut temp_buf = _rest.to_vec();
-    temp_buf.push(0);
-    let request_length = (temp_buf.to_vec().len() as u32) - 1 ;
-    let  request = Box::into_raw(temp_buf.to_vec().into_boxed_slice()) as *const u8;
-    // let data = mqtt_packet_parse(buf, 10);
-    unsafe {
-        println!("");
-        println!("---");
-        println!("MQTT Packet Data (hex)");
-        println!("{:02x?}", &temp_buf.to_vec()[..(temp_buf.len() - 1)]);
-        println!("");
-        let data = mqtt_packet_parse(request, request_length);
-        println!("message_type=0x{:02x?}", data.message_type);
-        println!("message_name={}", cstring_to_str(data.message_name));
-        println!("flag=0x{:02x?}", data.flags.flag);
-        println!("dup_flag=0x{:02x?}", data.flags.dup_flag);
-        println!("qos_flag=0x{:02x?}", data.flags.qos_flag);
-        println!("retain_flag=0x{:02x?}", data.flags.retain_flag);
-        println!("remaining_length={}", data.remaining_length);
-        println!("topic_length={}", data.publish.topic_length);
-        println!("topic_name={}", cstring_to_str(data.publish.topic_name));
-        println!("property_length={}", data.publish.property_length);
-        println!("payload={}", cstring_to_str(data.publish.payload));
-        println!("error_code={}", data.error.code);
-        println!("error_message={}", cstring_to_str(data.error.message));
-        println!("---");
-        println!("");
-    }    
-    
+    let start = std::time::Instant::now();
+    let data = mqtt_packet_buf_parse(&_rest);
+
+    let end = start.elapsed();
+
+    if cstring_to_str(data.message_name) == "PUBLISH" {
+        // println!("{:?}", cstring_to_str(data.publish.payload));
+        use std::fs::OpenOptions;
+        use std::io::prelude::*;
+
+        let mut file = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .create(true)
+        .open("/tmp/original_parser_time.txt")
+        .unwrap();
+
+        let org_end_micro_text = (org_end.as_nanos() as f64 / 1000.0).to_string() + ",";
+
+        match file.write_all(org_end_micro_text.as_bytes()) {
+            Err(e) => println!("{:?}", e),
+            _ => ()
+        }
+
+        let mut file = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .create(true)
+        .open("/tmp/my_parser_time.txt")
+        .unwrap();
+
+        let end_micro_text = (end.as_nanos() as f64 / 1000.0).to_string() + ",";
+
+        match file.write_all(end_micro_text.as_bytes()) {
+            Err(e) => println!("{:?}", e),
+            _ => ()
+        }
+    }
 
     Ok(Some(packet))
 }

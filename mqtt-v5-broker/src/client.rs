@@ -29,7 +29,7 @@ impl<ST: Stream<Item = PacketResult> + Unpin, SI: Sink<Packet, Error = EncodeErr
             .await
             .map_err(|_| ProtocolError::ConnectTimedOut)?;
 
-        println!("got a packet: {:?}", first_packet);
+        // println!("got a packet: {:?}", first_packet);
 
         match first_packet {
             Some(Ok(Packet::Connect(connect_packet))) => {
@@ -189,7 +189,7 @@ impl<ST: Stream<Item = PacketResult> + Unpin, SI: Sink<Packet, Error = EncodeErr
         let task_tx = Self::handle_socket_writes(self.packet_sink, self.broker_rx);
 
         tokio::select! {
-            _ = task_rx => println!("rx"),
+            _ = task_rx => (),// println!("rx"),
             _ = task_tx => println!("tx"),
             else => println!("done"),
         }

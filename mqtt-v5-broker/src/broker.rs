@@ -121,7 +121,7 @@ impl Broker {
             let _ = session.client_sender.try_send(ClientMessage::Disconnect);
         }
 
-        println!("Client ID {} connected (Version: {:?})", client_id, protocol_version);
+        // println!("Client ID {} connected (Version: {:?})", client_id, protocol_version);
 
         let connect_ack = ConnectAckPacket {
             // Variable header
@@ -193,7 +193,7 @@ impl Broker {
     }
 
     fn handle_disconnect(&mut self, client_id: String) {
-        println!("Client ID {} disconnected", client_id);
+        // println!("Client ID {} disconnected", client_id);
         if let Some(session) = self.sessions.remove(&client_id) {
             for (topic, token) in session.subscription_tokens {
                 self.subscriptions.remove(&topic, token);

@@ -25,7 +25,7 @@ mod client;
 mod tree;
 
 async fn client_handler(stream: TcpStream, broker_tx: Sender<BrokerMessage>) {
-    println!("Handling a client");
+    // println!("Handling a client");
 
     let (sink, stream) = Framed::new(stream, MqttCodec::new()).split();
     let unconnected_client = UnconnectedClient::new(stream, sink, broker_tx);
@@ -168,7 +168,7 @@ async fn server_loop(broker_tx: Sender<BrokerMessage>) {
     loop {
         let (socket, addr) =
             listener.accept().await.expect("Error in server_loop 'listener.accept()");
-        println!("Got a new socket from addr: {:?}", addr);
+        // println!("Got a new socket from addr: {:?}", addr);
 
         let handler = client_handler(socket, broker_tx.clone());
 
@@ -185,7 +185,7 @@ async fn websocket_server_loop(broker_tx: Sender<BrokerMessage>) {
     loop {
         let (socket, addr) =
             listener.accept().await.expect("Error in websocket_server_loop 'listener.accept()");
-        println!("Got a new socket from addr: {:?}", addr);
+        // println!("Got a new socket from addr: {:?}", addr);
 
         let handler = websocket_client_handler(socket, broker_tx.clone());
 
