@@ -1116,11 +1116,23 @@ fn decode_packet(
 }
 
 #[repr(C)]
+struct Struct_connect {
+    protocol_name: *const std::os::raw::c_char,
+    protocol_version: u8
+}
+
+#[repr(C)]
 struct Struct_variable_header_publish {
-  topic_length: u32,
-  topic_name: *const std::os::raw::c_char,
-  property_length: u32,
-  payload: *const std::os::raw::c_char
+    topic_length: u32,
+    topic_name: *const std::os::raw::c_char,
+    property_length: u32,
+    payload: *const std::os::raw::c_char
+}
+
+#[repr(C)]
+struct Struct_disconnect_reason {
+    disconnect_reason_code: u8,
+    disconnect_reason_code_name: *const std::os::raw::c_char
 }
 
 #[repr(C)]
@@ -1143,13 +1155,16 @@ pub struct Struct_fixed_header {
   message_name: *const std::os::raw::c_char,
   flags: Struct_flags,
   remaining_length: u32,
+  connect: Struct_connect,
   publish: Struct_variable_header_publish,
+  disconnect: Struct_disconnect_reason,
   error: Struct_error_struct
 }
 
 #[link(name = "mqtt")]
 extern "C" {
     fn mqtt_packet_parse(request: *const u8, packet_size: u32) -> Struct_fixed_header;
+    fn kremlinit_globals();
 }
 
 fn cstring_to_str<'a>(c_string: *const std::os::raw::c_char) -> &'a str {
@@ -1164,22 +1179,30 @@ fn print_struct_fixed_header(org_buf: &bytes::BytesMut, data: Struct_fixed_heade
     let topic_name = cstring_to_str(data.publish.topic_name);
     let payload = cstring_to_str(data.publish.payload);
     let message = cstring_to_str(data.error.message);
+    let protocol_name = cstring_to_str(data.connect.protocol_name);
+    let disconnect_reason_code_name = cstring_to_str(data.disconnect.disconnect_reason_code_name);
     println!("");
     println!("---");
     println!("MQTT Packet Data (hex)");
     println!("{:02x?}", org_buf_vec );
     println!("");
-    println!("message_type=0x{:02x?}", data.message_type);
-    println!("message_name={}",message_name);
-    println!("flag=0x{:02x?}", data.flags.flag);
-    println!("dup_flag=0x{:02x?}", data.flags.dup_flag);
-    println!("qos_flag=0x{:02x?}", data.flags.qos_flag);
-    println!("retain_flag=0x{:02x?}", data.flags.retain_flag);
-    println!("remaining_length={}", data.remaining_length);
-    println!("topic_length={}", data.publish.topic_length);
-    println!("topic_name={}", topic_name);
-    println!("property_length={}", data.publish.property_length);
-    println!("payload={}", payload);
+    println!("data.message_type=0x{:02x?}", data.message_type);
+    println!("data.message_name={}",message_name);
+    println!("data.flag=0x{:02x?}", data.flags.flag);
+    println!("data.dup_flag=0x{:02x?}", data.flags.dup_flag);
+    println!("data.qos_flag=0x{:02x?}", data.flags.qos_flag);
+    println!("data.retain_flag=0x{:02x?}", data.flags.retain_flag);
+    println!("data.remaining_length={}", data.remaining_length);
+    println!("data.publish.topic_length={}", data.publish.topic_length);
+    println!("data.publish.topic_name={}", topic_name);
+    println!("data.publish.property_length={}", data.publish.property_length);
+    println!("data.publish.payload={}", payload);
+    println!("data.connect.protocol_name={}", protocol_name);
+    println!("data.connect.protocol_version={}", data.connect.protocol_version);
+    println!("data.disconnect.disconnect_reason_code_name={}", disconnect_reason_code_name);
+    println!("data.disconnect.disconnect_reason_code={}", data.disconnect.disconnect_reason_code);
+
+
     println!("error_code={}", data.error.code);
     println!("error_message={}", message);
     println!("---");
@@ -1192,6 +1215,8 @@ fn mqtt_packet_buf_parse(org_buf: &bytes::BytesMut) -> Struct_fixed_header {
     let request_length = (temp_buf.to_vec().len() as u32) - 1 ;
     let  request = Box::into_raw(temp_buf.to_vec().into_boxed_slice()) as *const u8;
     unsafe {
+        kremlinit_globals();
+        print_struct_fixed_header(org_buf, mqtt_packet_parse(request, request_length));
         return mqtt_packet_parse(request, request_length);
     }
 }

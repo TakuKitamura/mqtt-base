@@ -6,6 +6,7 @@ fn main() {
   cc::Build::new()
       .warnings(true)
       .file("../../mqtt-packet-parser/out/Main.c")
+      .file("../../mqtt-packet-parser/out/kremlinit.c")
       .file("../../mqtt-packet-parser/utils.c")
       .include("../../mqtt-packet-parser/out")
       .include(kremlin_home + "/include")
